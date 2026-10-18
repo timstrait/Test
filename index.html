@@ -101,6 +101,14 @@ input[type=text]:focus{border-color:var(--rose2);box-shadow:0 0 0 4px rgba(233,1
 .btn:active{transform:scale(.97)}
 .btn.ghost{background:transparent;color:var(--red);box-shadow:inset 0 0 0 1.5px var(--rose2)}
 .btn.gold{background:linear-gradient(135deg,#d9b866,var(--gold) 55%,#a8822f);box-shadow:0 10px 22px -8px rgba(140,100,20,.55)}
+.choices{display:flex;flex-direction:column;gap:10px;width:100%}
+.choice{font:500 16px var(--sans);color:var(--ink);background:#fff;border:1.5px solid #ecc4cc;border-radius:14px;padding:14px 16px;cursor:pointer;
+  transition:transform .15s,background .3s,border-color .3s,opacity .3s;text-align:center}
+.choice:active{transform:scale(.97)}
+.choice.wrong{opacity:.45;text-decoration:line-through;border-color:#eee;cursor:default}
+.choice.right{background:linear-gradient(135deg,#f7e4b0,var(--gold2));border-color:var(--gold);font-weight:600;transform:scale(1.03)}
+[hidden]{display:none!important}
+#next{margin-top:6px;width:100%;animation:fadeIn .6s ease both}
 .feedback{min-height:48px;font-family:var(--serif);font-size:1.15rem;color:var(--red);margin-top:4px;line-height:1.35}
 .shake{animation:shake .5s ease}
 @keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
@@ -144,12 +152,10 @@ input[type=text]:focus{border-color:var(--rose2);box-shadow:0 0 0 4px rgba(233,1
       <div class="ornament">✦ ✦ ✦</div>
       <h1>Mein Schatz,</h1>
       <p class="lead reveal-line" style="animation-delay:.3s">Bevor du dein Geschenk bekommst, musst du ein kleines Rätsel lösen.</p>
-      <p class="riddle reveal-line" style="animation-delay:1.3s">„Was ist kostbar, lässt sich nicht festhalten und ist am schönsten, wenn wir es gemeinsam verbringen?“</p>
-      <form id="form" class="reveal-line" style="animation-delay:2.1s" autocomplete="off">
-        <input type="text" id="answer" placeholder="Deine Antwort …" aria-label="Deine Antwort" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
-        <button class="btn" type="submit">Antwort prüfen ♥</button>
-        <div class="feedback" id="feedback" aria-live="polite"></div>
-      </form>
+      <p class="riddle reveal-line" style="animation-delay:1.3s">Was wolltest du schon immer machen?</p>
+      <div class="choices reveal-line" id="choices" style="animation-delay:2.1s"></div>
+      <div class="feedback" id="feedback" aria-live="polite"></div>
+      <button class="btn" type="button" id="next" hidden>Weiter ♥</button>
     </div>
   </section>
 
@@ -216,37 +222,32 @@ input[type=text]:focus{border-color:var(--rose2);box-shadow:0 0 0 4px rgba(233,1
   env.addEventListener('click', openEnv);
   env.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEnv(); } });
 
-  // ---------- answer check ----------
-  const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ß/g,'ss').replace(/[^a-z\s]/g,' ').trim();
-  const lev = (a, b) => {
-    const d = Array.from({length: a.length + 1}, (_, i) => [i, ...Array(b.length).fill(0)]);
-    for (let j = 1; j <= b.length; j++) d[0][j] = j;
-    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
-      d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
-    return d[a.length][b.length];
-  };
-  const isCorrect = raw => {
-    const n = norm(raw); if (!n) return false;
-    const words = n.split(/\s+/);
-    const ok = ['zeit','zeiten','time','zeitt','zait','ziet'];
-    return words.some(w => ok.includes(w) || (w.length >= 3 && w.length <= 6 && lev(w, 'zeit') <= 1) ||
-      /^(gemeinsame|zusammen|unsere|die|quality|qualitats|lebens|freizeit|zweisamkeit)?zeit/.test(w) || w === 'zweisamkeit' || w === 'momente' || w === 'moment' || w === 'augenblick' || w === 'augenblicke');
-  };
-  const hints = [
-    'Fast! Denk mal an etwas, das wie im Flug vergeht, wenn ich bei dir bin … ⏳',
-    'Kleiner Tipp: Uhren messen es, aber festhalten können sie es nicht. 🕰️',
-    'Noch ein Versuch, mein Herz – es fängt mit „Z“ an und hat nur vier Buchstaben. 💕',
-    'Ich verrat’s fast: Z _ _ T 😘'
-  ];
-  let tries = 0;
-  $('#form').addEventListener('submit', e => {
-    e.preventDefault();
-    const inp = $('#answer'), fb = $('#feedback');
-    if (isCorrect(inp.value)) { inp.blur(); success(); return; }
-    fb.textContent = hints[Math.min(tries, hints.length - 1)]; tries++;
-    const card = $('#s-riddle .card'); card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
-    inp.select();
+  // ---------- choice quiz ----------
+  const OPTIONS = [
+    { t: 'Fallschirmspringen 🪂', h: 'Uiii, mutig! Aber das ist es nicht … 😄' },
+    { t: 'Einen Marathon laufen 🏃‍♀️', h: 'Respekt – aber nein, da laufe ich lieber mit dir spazieren. 😘' },
+    { t: 'Kochen lernen 🍝', h: 'Lecker gedacht, aber leider falsch! 💕' },
+    { t: 'Einmal nach Paris 🗼', h: 'Romantisch – aber das ist es diesmal nicht. 🥰' },
+    { t: 'Ein Piercing stechen lassen 💎', ok: true }
+  ].sort(() => Math.random() - .5);
+  const box = $('#choices'), fb = $('#feedback'), next = $('#next');
+  OPTIONS.forEach(o => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'choice'; b.textContent = o.t;
+    b.addEventListener('click', () => {
+      if (b.disabled || !next.hidden) return;
+      if (o.ok) {
+        b.classList.add('right'); box.querySelectorAll('.choice').forEach(x => x.disabled = true);
+        fb.textContent = 'Richtig, mein Schatz! 💖'; next.hidden = false;
+        if (navigator.vibrate) navigator.vibrate(40);
+        const r = b.getBoundingClientRect(); burst(r.left + r.width / 2, r.top + r.height / 2, 40, true);
+      } else {
+        b.classList.add('wrong'); b.disabled = true; fb.textContent = o.h;
+        const card = $('#s-riddle .card'); card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
+      }
+    });
+    box.appendChild(b);
   });
+  next.addEventListener('click', success);
 
   // ---------- success ----------
   function success() {
